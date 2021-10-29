@@ -1,0 +1,183 @@
+---
+title: "Project 2"
+author: "Luke Terry"
+date:  "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: show
+    csl: biomed-central.csl
+    df_print: paged
+    fig_caption: yes
+    fig_height: 6
+    fig_width: 7
+    number_sections: yes
+    theme: journal
+    toc: yes
+    toc_float: yes
+  word_document:
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    df_print: kable
+    fig_caption: yes
+    fig_height: 6
+    fig_width: 7
+    highlight: tango
+    toc: yes
+    toc_depth: 4
+bibliography: project.bib
+abstract: This project is all about applications of SLR to real data using R
+---
+
+<center>
+
+![Luke Terry](me.jpg "My Picture"){ width=20% }
+
+</center>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(leaflet)
+library(dplyr)
+```
+
+# My Video
+
+```{r}
+# <video width="320" height="240" controls>
+#   <source src="usingvideoinrmd.mp4" type="video/mp4">
+# Your browser does not support the video tag.
+# </video>
+```
+
+
+
+
+# Introduction
+
+Baseball is a timeless sport which was popularized in the United States in the mid 1850s (@Wikipedia2021). Like many other sports in the United States, watching baseball, talking about baseball, and making predictions about baseball is a popular pastime among many people.
+
+Compared to other sports, baseball and statistics have a close relationship. Perhaps it's something about the leisurely pace of a baseball game, or the easily measurable individual actions in each baseball play. Many people believe that the use of statistics in baseball was introduced by Billy Beane, the General Manager of the Oakland A's, since this narrative was popularized in Michael Lewis's 2003 book *Moneyball* (@Moneyball), and 2011 movie of the same name. Statistics in baseball, however, have been a consideration within coaching staff far before Billy Beane. There exist evidence of statisticians assisting baseball managers as early as 1940, and many general managers used statistical analysis to inform their decisions prior to Beane, such as Danny Evans of the Dodgers and Doug Melvin of the Brewers. Beane's fascination with OBP was not a new development either. Sandy Alderson rebuilt the A's strategy around OBP two decades before Billy Beane ever managed the A's (@NumbersGame).
+
+There even exists a special term for the art of analyzing baseball statistics: sabermetrics. It was coined by Bill James, and influential statistician in the field, and its name refers to SABR, and acronym for the society of american baseball research (@NumbersGame)
+
+## What are the variables? 
+
+Each experimental unit in this case is one pitcher, or rather how one pitcher performed over the course of the 2019 season.
+
+There are several statistics which are calculated based on each pitchers performance. These include traditional statistics, like Earned Run Average (ERA), Wins, and Losses, but I've also added a column for the hits a pitcher gives up per out they earn. 
+
+Each player is identified in the table by a playerID which is unique to them (believe it or not, there are several MLB players with the same name as other players throughout history).
+
+The variables which I am interested in are any quantitative statistics of a pitcher, and the amount of hits per out they give up, a quantitative measure. I intend to find out which statistics (if any) predict the rate at which a pitcher gives up hits.
+
+```{r pitcherTable}
+library(Lahman)
+
+ptall <- Lahman::Pitching
+pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 data is analyzed
+
+pt$HPO <- pt$H/pt$IPouts #add hits per out column
+
+library(DT)
+datatable(subset(pt, select = c("playerID", "teamID", "ERA", "W", "L", "HPO")))
+```
+
+### Plot data
+
+```{r carcharacteristics, fig.height = 5, fig.cap = "MTCARS",fig.align='center',fig.cap="Graph of data with loess smoother"}
+library(ggplot2)
+g = ggplot(mtcars, aes(x = disp, y = mpg, color = cyl)) + geom_point()
+g = g + geom_smooth(method = "loess")
+g
+```
+
+
+## How were the data collected? 
+
+Luckily for me, baseball's extra close relationship with statistical scrutiny means that copius amounts of reliable sabermetric data are available from various sources, free of charge.
+
+The specific data which I am using is a nearly exhaustive record of traditional baseball statistics compiled by Sean Lahman, called the Lahman Database. The data set contains standard batting and pitching statistics, for every player, by year, since 1871, although for the sake of brevity, my analysis will focus on the 2019 regular MLB season. Specifically, I intend to use linear regression to isolate factors which affect the rate at which pitchers give up hits.
+
+## What is the story behind the data?
+
+## Why was it gathered? 
+
+## What is your interest in the data?
+
+### Include pictures `![](jpeg)`
+
+## What problem do you wish to solve?
+
+# Theory needed to carry out SLR
+## Main result 1
+## Main result 2
+## Main result 3 etc
+
+# Validity with mathematical expressions
+
+
+The following function was taken from [https://rpubs.com/therimalaya/43190](https://rpubs.com/therimalaya/43190)
+
+## Checks on validity
+
+### Straight trend line  
+
+#### Use trendscatter
+
+### Errors distributed Normally
+
+$$\epsilon_i \sim N(0,\sigma^2)$$
+
+
+
+#### Shapiro-wilk
+
+### Constant variance
+
+#### Residual vs fitted values
+
+#### trendscatter on Residual Vs Fitted
+
+### Zero mean value of $\epsilon$
+
+### Independence of data 
+
+# Model selection if you compared models 
+
+## Use adjusted $R^2$ 
+$$R_{adj}^2 =$$
+
+
+
+# Analysis of the data
+
+## Make sure you include many great plots
+
+## Add the trend to the data
+
+
+## Summary lm object
+
+### Interpretation of all tests
+### Interpretation of multiple R squared
+### Interpretation of all point estimates
+## Calculate cis for $\beta$ parameter estimates
+### Use of `predict()`
+### Use of `ciReg()`
+
+### Check on outliers using cooks plots
+
+Remember to interpret this plot and all other plots
+
+
+
+# Conclusion
+## Answer your research question
+## Suggest ways to improve model or experiment
+
+
+# References
+  

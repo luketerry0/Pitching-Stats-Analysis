@@ -1,0 +1,45 @@
+@misc{Wikipedia2021,
+   author = "Wikipedia",
+   title = "{Baseball} --- {W}ikipedia{,} The Free Encyclopedia",
+   year = "2021",
+   howpublished = {\url{http://en.wikipedia.org/w/index.php?title=Baseball&oldid=1049486124}},
+   note = "[Online; accessed 22-October-2021]"
+ }
+ 
+@book{Curveball,
+abstract = {The intent of this book is to look at baseball data from a statistical modeling perspective. There is a fascination among baseball fans and the media to collect data on every imaginable event during a baseball game and to use these data to try to understand characteristics of the game. The problem is that patterns in baseball data are difficult to detect due to the inherent chance variation that is present. This book addresses a number of questions that are of interest to many baseball fans. These issues include how to rate players, predict the outcome of a game or the attainment of an attainment, making sense of situational data, and deciding the most valuable players in the World Series. This book will be directed to a general audience and does not assume that the reader has any prior background in probability or statistics, although knowledge of high school algebra will be helpful.},
+publisher = {Copernicus Books},
+isbn = {0387215123},
+year = {2003},
+title = {Curve ball baseball, statistics, and the role of chance in the game / Jim Albert, Jay Bennett.},
+edition = {Rev. ed..},
+language = {eng},
+address = {New York},
+author = {Albert, Jim},
+keywords = {Baseball -- Statistics},
+}
+
+@book{NumbersGame,
+abstract = {"In this book, Alan Schwarz, whom bestselling Moneyball author Michael Lews calls "one of today's best baseball journalists," provides the first-ever history of baseball statistics, showing how baseball and its numbers have been inseparable ever since the pastime's birth in 1845.},
+publisher = {T. Dunne Books},
+year = {2004},
+title = {The numbers game : baseball's lifelong fascination with statistics / Alan Schwarz.},
+edition = {1st ed..},
+language = {eng},
+address = {New York},
+author = {Schwarz, Alan},
+keywords = {Baseball -- United States -- Statistics -- History},
+}
+
+@book{Moneyball,
+publisher = {W.W. Norton},
+isbn = {0393057658},
+year = {2003},
+title = {Moneyball : the art of winning an unfair game / Michael Lewis.},
+edition = {1st ed..},
+language = {eng},
+address = {New York},
+author = {Lewis, Michael (Michael M.)},
+keywords = {Baseball -- Economic aspects -- United States},
+lccn = {2003005089},
+}
