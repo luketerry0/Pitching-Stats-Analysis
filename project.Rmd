@@ -67,7 +67,7 @@ There even exists a special term for the art of analyzing baseball statistics: s
 
 Each experimental unit in this case is one pitcher, or rather how one pitcher performed over the course of the 2019 season.
 
-There are several statistics which are calculated based on each pitchers performance. These include traditional statistics, like Earned Run Average (ERA), Wins, and Losses, but I've also added a column for the hits a pitcher gives up per out they earn. 
+There are several statistics which are calculated based on each pitchers performance. These include traditional statistics, like Earned Run Average (ERA), Wins, and Losses, but I've also added a column for the hits a pitcher gives up per out they earn.
 
 Each player is identified in the table by a playerID which is unique to them (believe it or not, there are several MLB players with the same name as other players throughout history).
 
@@ -79,6 +79,9 @@ library(Lahman)
 ptall <- Lahman::Pitching
 pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 data is analyzed
 
+
+#pt <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers
+
 pt$HPO <- pt$H/pt$IPouts #add hits per out column
 
 library(DT)
@@ -88,31 +91,154 @@ datatable(subset(pt, select = c("playerID", "teamID", "ERA", "W", "L", "HPO")))
 ### Plot data
 
 ```{r carcharacteristics, fig.height = 5, fig.cap = "MTCARS",fig.align='center',fig.cap="Graph of data with loess smoother"}
-library(ggplot2)
-g = ggplot(mtcars, aes(x = disp, y = mpg, color = cyl)) + geom_point()
-g = g + geom_smooth(method = "loess")
-g
+# library(ggplot2)
+# g = ggplot(mtcars, aes(x = disp, y = mpg, color = cyl)) + geom_point()
+# g = g + geom_smooth(method = "loess")
+# g
 ```
 
 
 ## How were the data collected? 
 
-Luckily for me, baseball's extra close relationship with statistical scrutiny means that copius amounts of reliable sabermetric data are available from various sources, free of charge.
+Luckily for me, baseball's extra close relationship with statistical scrutiny means that copious amounts of reliable sabermetric data are available from various sources online, free of charge.
 
-The specific data which I am using is a nearly exhaustive record of traditional baseball statistics compiled by Sean Lahman, called the Lahman Database. The data set contains standard batting and pitching statistics, for every player, by year, since 1871, although for the sake of brevity, my analysis will focus on the 2019 regular MLB season. Specifically, I intend to use linear regression to isolate factors which affect the rate at which pitchers give up hits.
+The specific data which I am using is a nearly exhaustive record of traditional baseball statistics compiled by Sean Lahman, called the Lahman Database(@Lahman). The data set contains standard batting and pitching statistics, for every player, by year, since 1871, although for the sake of brevity, my analysis will focus on the 2019 regular MLB season. Specifically, I intend to use linear regression to isolate factors which affect the rate at which pitchers give up hits.
 
-## What is the story behind the data?
+The database was compiled from various sources by a team of volunteers, since it dates back to 1871. The season that I will focus on however (2019), was likely scraped from mlb.com since major league baseball now offers statistics in that online format.
+
+The data itself, however, was collected by a combination of volunteers and mlb staff. 
 
 ## Why was it gathered? 
 
+At its core, the data here was gathered to help mlb coaches and team administrations make informed decisions. The ubiquity and accuracy of sabermetrics, however, have allowed the media to take a real interest in baseball statistics.
+
 ## What is your interest in the data?
+
+My personal interest in the data does not, however, lie in making informed decisions or predictions of overall baseball games. Each year, the MLB runs a competition called Beat the Streak. The rules are simple: each day, you are allowed to pick one or two batters who you think will get a hit that particular day. For each of your batters, if they get a hit, your streak goes up by 1. If they have an at bat, but fail to get a hit, your streak resets to 0. If you get a streak of 57 during the regular season, you win 5.6 million dollars (@bts). 
+
+Obviously, this is a difficult challenge to achieve. The probability of winning it big follows a binomial distribution, with a probability of getting a hit equal to the probability that the chosen batter gets a hit in a day. The probability that a chosen batter gets a hit in a day ostensibly follows a binomial distribution, where the probabilty of a success in each Bernoulli trial is the players batting average, and the number of trials is the number of at bats the player is likely to get based on their position in the batting lineup. Below is a histogram of the seasonal batting averages for all major league players. To remove potential outliers, only players with more than 30 at bats in a season are on this histogram.
+
+```{r}
+library(ggplot2)
+bt <- Lahman::battingStats() #initialize batting data
+
+#create histogram
+bt <- subset(bt, bt$AB > 30)
+g = ggplot(bt, aes(x=BA))
+g = g + geom_histogram(fill = "#a62919", binwidth = .1)
+g = g + xlab("Batting Averages")
+g = g + ylab("Frequency")
+g = g + ggtitle("Distribution of Seasonal Major League Batting Averages")
+g
+```
+
+As you can see, it will be difficult to predict with certainty that a player gets a hit in a day. The average batting average for this historical dataset is 0.239. You can pick players with high batting averages, of course, but those players may not always get many plate appearances, and their batting averages don't get *that* much higher. For instance, the all time high batting average in this data set is still only 0.512. (The batting average is from Rudy Penderton's 1996 season with the Red Sox)
+
+If we assume that a player as good as Rudy Penderton can be chosen everyday (which is a generous assumption), and we assume that this player gets 4 plate appearances per game (which is the average amount that most places in the order will get, especially when players who have a higher batting average are chosen @PA), then the probability of a hit is about 94%^[This is because the probability for getting a hit that day follows a binomial distribution with 4 trials, and a probability of the batting average for each trial (0.512 in Penderton's case). The R command used to find this answer is 1-dbinom(0,4,0.512)].
+
+Although this is a high probability, we have to keep in mind that we don't just want to predict whether a player will get a hit in a day, we want to predict whether a player will get a hit in a day *57 times in a row*. Thus if we were able to pick Rudy Penderton every day, the probability of attaining a 57 day streak is 0.00203, or about 1 in 500 ^[This is because the probability of choosing 57 correct days in a row can be estimated with the geometric distribution, with 1- ~94% (or ~6%) as the probability, and 57 as the number of failures before 1 "success" (or in this case day without a hit) occurs. The R command used to find this answer is dgeom(57,1-pb), where pb is an object containint the exact probability of Penderton getting a hit in a day as calculated in the previous paragraph.].
+
+This answer, however, assumes that each hit is a totally independent trial, where the only factor at play is the player's batting average. In reality, there are many factors which affect a baseball players ability to get hits. Conventional knowledge dictates that the pitcher which a batter is facing is the most important factor that dictates a player's ability to get a hit (apart from the players themselves). Because of this, this analysis will focus on what factors may cause a pitcher to give up more hits.
 
 ### Include pictures `![](jpeg)`
 
-## What problem do you wish to solve?
+# Premliminary Plots and Interpretation of the data
+
+In order to decide which variables to analyze using linear regression, it's useful to make preliminary plots and analyze them subjectively for seemingly linear patterns. Below are a few which I've constructed using some traditional pitching statistics. All graphs are a plot of a traditional pitching statistic versus a pitcher's Hits Per Out.
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+createLowessForHPO <- function(column, xvar){
+  g <- ggplot(pt, aes(x = column, y = HPO)) + geom_point()
+  g = g + geom_smooth(method = "loess")
+  #g = g + ggtitle(paste(xvar ," versus Hits given up Per Out"))
+  g = g + ggtitle(xvar)
+  g = g + xlab(xvar) + ylab("Hits Per Out")
+  g
+}
+
+
+a = createLowessForHPO(pt$W, "Wins")
+b = createLowessForHPO(pt$ERA, "Earned Run Average")
+c = createLowessForHPO(pt$BB, "Total Walks Given Up")
+d = createLowessForHPO(pt$SO, "Strikeouts")
+e = createLowessForHPO(pt$BAOpp, "Opponents Batting Average")
+f = createLowessForHPO(pt$ER, "Earned Runs")
+g = createLowessForHPO(pt$BB/pt$IPouts, "Total Walks Given Up Per Out")
+h = createLowessForHPO(pt$BFP/pt$IPouts, "Batters Faced Per Out")
+
+a + b + c + d + e + f + g + h + plot_layout(ncol = 4)
+```
+
+As you can see, there are a few factors that seem to have some association with the Hits Per Out that a pitcher gives up. The amount of batters faced by a pitcher (per out) seems to have an association, but the loess line is more curve than I was hoping for. Opponent's batting average seems to have some kind of curved association, and ERA seems to have a very straight association, but doing an analysis on either of these two variables would be uninteresting, since the statistics are dimensionally equal. For instance, a pitcher's ERA is equal to the number of runs the pitcher gives up per nine innings. Since hits earn runs, of course a higher number of hits is going to correspond to a higher number of runs.
+
+Fortunately for me, baseball research and statistics have tied in more statistical measurements in the recent past. Through an MLB service called Statcast (@CITATIONNEEDED), it is possible to analyze more uncommon measures of a pitcher's tendencies.
+
+```{r}
+stc <- read.csv("data/statcast_pitching_data.csv")
+#for some reason different baseball databases use different playerIDS
+#There was no direct crosswalk between the Lahman database and Statcast, so I had to make it myself.
+#The script which does this is in the idCrosswalkTable.R file.
+cw <- readRDS("data/crosswalk.RDS")
+
+#initialize vector for new column
+velocity <- c()
+spin_rate <- c()
+release_extension <- c()
+xba <- c()
+eff_min_vel <- c()
+babip <- c()
+
+
+#add statcast data to Lahman pitcher data frame.
+for (i in pt$playerID){
+  #iterate over every pitcher, get their stats
+  mlbID <- cw[which(cw == i),2]
+  playerStats <- stc[which(stc$player_id == mlbID),]
+  
+  #add stats to column vectors
+  velocity <- c(velocity, playerStats$velocity)
+  spin_rate <- c(spin_rate, playerStats$spin_rate)
+  release_extension <- c(release_extension, playerStats$release_extension)
+  xba <- c(xba, playerStats$xba)
+  eff_min_vel <- c(eff_min_vel, playerStats$eff_min_vel)
+  babip <- c(babip, playerStats$babip)
+
+}
+
+#add new columnds to pt
+pt <- cbind(pt, velocity)
+pt <- cbind(pt, spin_rate)
+pt <- cbind(pt, release_extension)
+pt <- cbind(pt, xba)
+pt <- cbind(pt, eff_min_vel)
+pt <- cbind(pt, babip)
+
+
+
+#make new plots
+createLowessForHPO(pt$velocity, "Velocity")
+createLowessForHPO(pt$spin_rate, "Spin Rate")
+createLowessForHPO(pt$release_extension, "Release Extension")
+createLowessForHPO(pt$xba, "Exp. Batting Average")
+createLowessForHPO(pt$eff_min_vel, "Effective Velocity Differential")
+createLowessForHPO(pt$babip, "BABIP")
+
+
+
+
+
+
+```
+
 
 # Theory needed to carry out SLR
+
 ## Main result 1
+
+
 ## Main result 2
 ## Main result 3 etc
 
