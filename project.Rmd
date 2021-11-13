@@ -80,12 +80,53 @@ ptall <- Lahman::Pitching
 pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 data is analyzed
 
 
-#pt <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers
+pt <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers
 
 pt$HPO <- pt$H/pt$IPouts #add hits per out column
 
 library(DT)
 datatable(subset(pt, select = c("playerID", "teamID", "ERA", "W", "L", "HPO")))
+
+#add statcast data to pt --------------------------------------------------------
+
+stc <- read.csv("data/statcast_pitching_data.csv")
+#for some reason different baseball databases use different playerIDS
+#There was no direct crosswalk between the Lahman database and Statcast, so I had to make it myself.
+#The script which does this is in the idCrosswalkTable.R file.
+cw <- readRDS("data/crosswalk.RDS")
+
+#initialize vector for new column
+velocity <- c()
+spin_rate <- c()
+release_extension <- c()
+xba <- c()
+eff_min_vel <- c()
+babip <- c()
+
+
+#add statcast data to Lahman pitcher data frame.
+for (i in pt$playerID){
+  #iterate over every pitcher, get their stats
+  mlbID <- cw[which(cw == i),2]
+  playerStats <- stc[which(stc$player_id == mlbID),]
+  
+  #add stats to column vectors
+  velocity <- c(velocity, playerStats$velocity)
+  spin_rate <- c(spin_rate, playerStats$spin_rate)
+  release_extension <- c(release_extension, playerStats$release_extension)
+  xba <- c(xba, playerStats$xba)
+  eff_min_vel <- c(eff_min_vel, playerStats$eff_min_vel)
+  babip <- c(babip, playerStats$babip)
+
+}
+
+#add new columnds to pt
+pt <- cbind(pt, velocity)
+pt <- cbind(pt, spin_rate)
+pt <- cbind(pt, release_extension)
+pt <- cbind(pt, xba)
+pt <- cbind(pt, eff_min_vel)
+pt <- cbind(pt, babip)
 ```
 
 ### Plot data
@@ -146,7 +187,7 @@ This answer, however, assumes that each hit is a totally independent trial, wher
 
 In order to decide which variables to analyze using linear regression, it's useful to make preliminary plots and analyze them subjectively for seemingly linear patterns. Below are a few which I've constructed using some traditional pitching statistics. All graphs are a plot of a traditional pitching statistic versus a pitcher's Hits Per Out.
 
-```{r}
+```{r echo = FALSE, warning=FALSE}
 library(ggplot2)
 library(patchwork)
 
@@ -160,16 +201,52 @@ createLowessForHPO <- function(column, xvar){
 }
 
 
-a = createLowessForHPO(pt$W, "Wins")
-b = createLowessForHPO(pt$ERA, "Earned Run Average")
-c = createLowessForHPO(pt$BB, "Total Walks Given Up")
-d = createLowessForHPO(pt$SO, "Strikeouts")
-e = createLowessForHPO(pt$BAOpp, "Opponents Batting Average")
-f = createLowessForHPO(pt$ER, "Earned Runs")
-g = createLowessForHPO(pt$BB/pt$IPouts, "Total Walks Given Up Per Out")
-h = createLowessForHPO(pt$BFP/pt$IPouts, "Batters Faced Per Out")
+a = createLowessForHPO(pt$ERA, "Earned Run Average")
 
 a + b + c + d + e + f + g + h + plot_layout(ncol = 4)
+```
+
+
+```{r eval = FALSE, echo = FALSE}
+library(shiny)
+library(ggplot2)
+library(patchwork)
+
+#only render these plots if in an interactive document type
+#if (interactive()){
+  
+ui <- basicPage(
+  plotOutput("LoessPlot"),
+
+  #list input variables
+  selectInput(inputId = "x", label = "X Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO")),
+  
+  selectInput(inputId = "y", label = "Y Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO")),
+
+#input for minimum number of pitches
+ sliderInput("mp", "Minimum number of Games for each pitcher",
+    min = 0, max = 50, value = 30, step = 1)
+  
+)
+
+server <- function(input, output) {
+  output$LoessPlot <- renderPlot({
+    
+  #subset pt based on minimum number of pitches
+  pt <- subset(pt, pt$G >= input$mp)
+    
+  g <- ggplot(data = pt, aes_string(x = input$x, y = input$y)) + geom_point()
+  g = g + ggtitle(input$x)
+  g = g + geom_smooth(method = "loess")
+
+  g
+  })
+
+}
+
+shinyApp(ui, server)
+
+#}
 ```
 
 As you can see, there are a few factors that seem to have some association with the Hits Per Out that a pitcher gives up. The amount of batters faced by a pitcher (per out) seems to have an association, but the loess line is more curve than I was hoping for. Opponent's batting average seems to have some kind of curved association, and ERA seems to have a very straight association, but doing an analysis on either of these two variables would be uninteresting, since the statistics are dimensionally equal. For instance, a pitcher's ERA is equal to the number of runs the pitcher gives up per nine innings. Since hits earn runs, of course a higher number of hits is going to correspond to a higher number of runs.
@@ -177,54 +254,16 @@ As you can see, there are a few factors that seem to have some association with 
 Fortunately for me, baseball research and statistics have tied in more statistical measurements in the recent past. Through an MLB service called Statcast (@CITATIONNEEDED), it is possible to analyze more uncommon measures of a pitcher's tendencies.
 
 ```{r}
-stc <- read.csv("data/statcast_pitching_data.csv")
-#for some reason different baseball databases use different playerIDS
-#There was no direct crosswalk between the Lahman database and Statcast, so I had to make it myself.
-#The script which does this is in the idCrosswalkTable.R file.
-cw <- readRDS("data/crosswalk.RDS")
-
-#initialize vector for new column
-velocity <- c()
-spin_rate <- c()
-release_extension <- c()
-xba <- c()
-eff_min_vel <- c()
-babip <- c()
-
-
-#add statcast data to Lahman pitcher data frame.
-for (i in pt$playerID){
-  #iterate over every pitcher, get their stats
-  mlbID <- cw[which(cw == i),2]
-  playerStats <- stc[which(stc$player_id == mlbID),]
-  
-  #add stats to column vectors
-  velocity <- c(velocity, playerStats$velocity)
-  spin_rate <- c(spin_rate, playerStats$spin_rate)
-  release_extension <- c(release_extension, playerStats$release_extension)
-  xba <- c(xba, playerStats$xba)
-  eff_min_vel <- c(eff_min_vel, playerStats$eff_min_vel)
-  babip <- c(babip, playerStats$babip)
-
-}
-
-#add new columnds to pt
-pt <- cbind(pt, velocity)
-pt <- cbind(pt, spin_rate)
-pt <- cbind(pt, release_extension)
-pt <- cbind(pt, xba)
-pt <- cbind(pt, eff_min_vel)
-pt <- cbind(pt, babip)
 
 
 
 #make new plots
-createLowessForHPO(pt$velocity, "Velocity")
-createLowessForHPO(pt$spin_rate, "Spin Rate")
-createLowessForHPO(pt$release_extension, "Release Extension")
-createLowessForHPO(pt$xba, "Exp. Batting Average")
-createLowessForHPO(pt$eff_min_vel, "Effective Velocity Differential")
-createLowessForHPO(pt$babip, "BABIP")
+# createLowessForHPO(pt$velocity, "Velocity")
+# createLowessForHPO(pt$spin_rate, "Spin Rate")
+# createLowessForHPO(pt$release_extension, "Release Extension")
+# createLowessForHPO(pt$xba, "Exp. Batting Average")
+# createLowessForHPO(pt$eff_min_vel, "Effective Velocity Differential")
+# createLowessForHPO(pt$babip, "BABIP")
 
 
 
