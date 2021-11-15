@@ -79,7 +79,7 @@ library(Lahman)
 ptall <- Lahman::Pitching
 pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 data is analyzed
 
-
+ptall <- pt
 pt <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers
 
 pt$HPO <- pt$H/pt$IPouts #add hits per out column
@@ -102,7 +102,8 @@ release_extension <- c()
 xba <- c()
 eff_min_vel <- c()
 babip <- c()
-
+takes <- c()
+launch_angle <- c()
 
 #add statcast data to Lahman pitcher data frame.
 for (i in pt$playerID){
@@ -117,6 +118,8 @@ for (i in pt$playerID){
   xba <- c(xba, playerStats$xba)
   eff_min_vel <- c(eff_min_vel, playerStats$eff_min_vel)
   babip <- c(babip, playerStats$babip)
+  takes <- c(takes, playerStats$takes)
+  launch_angle <- c(launch_angle, playerStats$launch_angle)
 
 }
 
@@ -127,6 +130,8 @@ pt <- cbind(pt, release_extension)
 pt <- cbind(pt, xba)
 pt <- cbind(pt, eff_min_vel)
 pt <- cbind(pt, babip)
+pt <- cbind(pt, takes)
+pt <- cbind(pt, launch_angle)
 ```
 
 ### Plot data
@@ -157,7 +162,7 @@ At its core, the data here was gathered to help mlb coaches and team administrat
 
 My personal interest in the data does not, however, lie in making informed decisions or predictions of overall baseball games. Each year, the MLB runs a competition called Beat the Streak. The rules are simple: each day, you are allowed to pick one or two batters who you think will get a hit that particular day. For each of your batters, if they get a hit, your streak goes up by 1. If they have an at bat, but fail to get a hit, your streak resets to 0. If you get a streak of 57 during the regular season, you win 5.6 million dollars (@bts). 
 
-Obviously, this is a difficult challenge to achieve. The probability of winning it big follows a binomial distribution, with a probability of getting a hit equal to the probability that the chosen batter gets a hit in a day. The probability that a chosen batter gets a hit in a day ostensibly follows a binomial distribution, where the probabilty of a success in each Bernoulli trial is the players batting average, and the number of trials is the number of at bats the player is likely to get based on their position in the batting lineup. Below is a histogram of the seasonal batting averages for all major league players. To remove potential outliers, only players with more than 30 at bats in a season are on this histogram.
+Obviously, this is a difficult challenge to achieve. The probability of winning it big follows a binomial distribution, with a probability of getting a hit equal to the probability that the chosen batter gets a hit in a day. The probability that a chosen batter gets a hit in a day ostensibly follows a binomial distribution, where the probabilty of a success in each Bernoulli trial is the players batting average, and the number of trials is the number of at bats the player is likely to get based on their position in the batting lineup. Below is a histogram of the seasonal batting averages for all major league players. To remove potential outliers, only players with more than 30 at bats in a season are included in this histogram.
 
 ```{r}
 library(ggplot2)
@@ -177,7 +182,7 @@ As you can see, it will be difficult to predict with certainty that a player get
 
 If we assume that a player as good as Rudy Penderton can be chosen everyday (which is a generous assumption), and we assume that this player gets 4 plate appearances per game (which is the average amount that most places in the order will get, especially when players who have a higher batting average are chosen @PA), then the probability of a hit is about 94%^[This is because the probability for getting a hit that day follows a binomial distribution with 4 trials, and a probability of the batting average for each trial (0.512 in Penderton's case). The R command used to find this answer is 1-dbinom(0,4,0.512)].
 
-Although this is a high probability, we have to keep in mind that we don't just want to predict whether a player will get a hit in a day, we want to predict whether a player will get a hit in a day *57 times in a row*. Thus if we were able to pick Rudy Penderton every day, the probability of attaining a 57 day streak is 0.00203, or about 1 in 500 ^[This is because the probability of choosing 57 correct days in a row can be estimated with the geometric distribution, with 1- ~94% (or ~6%) as the probability, and 57 as the number of failures before 1 "success" (or in this case day without a hit) occurs. The R command used to find this answer is dgeom(57,1-pb), where pb is an object containint the exact probability of Penderton getting a hit in a day as calculated in the previous paragraph.].
+Although this is a high probability, we have to keep in mind that we don't just want to predict whether a player will get a hit in a day, we want to predict whether a player will get a hit in a day *57 days in a row*. Thus if we were able to pick Rudy Penderton every day, the probability of attaining a 57 day streak is 0.00203, or about 1 in 500 ^[This is because the probability of choosing 57 correct days in a row can be estimated with the geometric distribution, with 1- ~94% (or ~6%) as the probability, and 57 as the number of failures before 1 "success" (or in this case day without a hit) occurs. The R command used to find this answer is dgeom(57,1-pb), where pb is an object containint the exact probability of Penderton getting a hit in a day as calculated in the previous paragraph.].
 
 This answer, however, assumes that each hit is a totally independent trial, where the only factor at play is the player's batting average. In reality, there are many factors which affect a baseball players ability to get hits. Conventional knowledge dictates that the pitcher which a batter is facing is the most important factor that dictates a player's ability to get a hit (apart from the players themselves). Because of this, this analysis will focus on what factors may cause a pitcher to give up more hits.
 
@@ -185,7 +190,7 @@ This answer, however, assumes that each hit is a totally independent trial, wher
 
 # Premliminary Plots and Interpretation of the data
 
-In order to decide which variables to analyze using linear regression, it's useful to make preliminary plots and analyze them subjectively for seemingly linear patterns. Below are a few which I've constructed using some traditional pitching statistics. All graphs are a plot of a traditional pitching statistic versus a pitcher's Hits Per Out.
+In order to decide which variables to analyze using linear regression, it's useful to make preliminary plots and analyze them subjectively for seemingly linear patterns. Below are a few which I've constructed using some traditional pitching statistics. All graphs are a plot of a traditional pitching statistic versus a pitcher's Hits Per Out (HPO).
 
 ```{r echo = FALSE, warning=FALSE}
 library(ggplot2)
@@ -194,7 +199,7 @@ library(patchwork)
 createLowessForHPO <- function(column, xvar){
   g <- ggplot(pt, aes(x = column, y = HPO)) + geom_point()
   g = g + geom_smooth(method = "loess")
-  #g = g + ggtitle(paste(xvar ," versus Hits given up Per Out"))
+  g = g + ggtitle(paste(xvar ," versus Hits given up Per Out"))
   g = g + ggtitle(xvar)
   g = g + xlab(xvar) + ylab("Hits Per Out")
   g
@@ -202,8 +207,12 @@ createLowessForHPO <- function(column, xvar){
 
 
 a = createLowessForHPO(pt$ERA, "Earned Run Average")
+b = createLowessForHPO(pt$xba, "Expected Batting Average")
+c = createLowessForHPO(pt$babip, "Batting Average for Balls in Play")
 
-a + b + c + d + e + f + g + h + plot_layout(ncol = 4)
+a
+b
+c
 ```
 
 
@@ -219,9 +228,9 @@ ui <- basicPage(
   plotOutput("LoessPlot"),
 
   #list input variables
-  selectInput(inputId = "x", label = "X Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO")),
+  selectInput(inputId = "x", label = "X Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO","Takes" = "takes", "Launch Angle" = "launch_angle", "Hits" = "H")),
   
-  selectInput(inputId = "y", label = "Y Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO")),
+  selectInput(inputId = "y", label = "Y Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO", "Takes" = "takes", "Launch Angle" = "launch_angle", "Hits" = "H")),
 
 #input for minimum number of pitches
  sliderInput("mp", "Minimum number of Games for each pitcher",
@@ -249,39 +258,59 @@ shinyApp(ui, server)
 #}
 ```
 
-As you can see, there are a few factors that seem to have some association with the Hits Per Out that a pitcher gives up. The amount of batters faced by a pitcher (per out) seems to have an association, but the loess line is more curve than I was hoping for. Opponent's batting average seems to have some kind of curved association, and ERA seems to have a very straight association, but doing an analysis on either of these two variables would be uninteresting, since the statistics are dimensionally equal. For instance, a pitcher's ERA is equal to the number of runs the pitcher gives up per nine innings. Since hits earn runs, of course a higher number of hits is going to correspond to a higher number of runs.
+For the sake of the preliminary analysis, I've filtered the pitching data to only include pitchers who've pitched a total of 30 games over their whole career. Heuristically, this allows me to minimize the effect on outliers in the data, although this is an oversimplification, and may exclude legitimate data. This is an acceptable sacrifice to make for the preliminary plots, however, since later in this analysis I'll take a more data-driven approach to eliminating outliers. Right now, I'm just looking for any kind of association.
 
-Fortunately for me, baseball research and statistics have tied in more statistical measurements in the recent past. Through an MLB service called Statcast (@CITATIONNEEDED), it is possible to analyze more uncommon measures of a pitcher's tendencies.
+As you can see, these three charts have vaguely linear patterns within them. Earned Run Average (ERA) refers to the amount of runs that a pitcher has, on average, given up per nine innings pitched. Expected batting average and Batting Average for Balls in Play are relatively new metrics to baseball, introduced through the Statcast system installed in all MLB ballparks in 2015 (@CITATIONNEEDED). Expected batting average refers to the likelihood that a batted ball becomes a hit, including home runs. Batting Average for Balls in Play (BABIP), however, refers to the liklihood that a batted ball in play (excluding home runs) becomes a hit. 
 
-```{r}
+Of these three, I think that ERA is the most logical to analyze, given my goal to predict hits per inning given up. The other two are similar to the expected batting average against a hitter which, like Hits Per Out, is a statistic base on the amount of hits a pitcher gives up. 
 
-
-
-#make new plots
-# createLowessForHPO(pt$velocity, "Velocity")
-# createLowessForHPO(pt$spin_rate, "Spin Rate")
-# createLowessForHPO(pt$release_extension, "Release Extension")
-# createLowessForHPO(pt$xba, "Exp. Batting Average")
-# createLowessForHPO(pt$eff_min_vel, "Effective Velocity Differential")
-# createLowessForHPO(pt$babip, "BABIP")
-
-
-
-
-
-
-```
-
+Although ERA is affected by hits (hits earn runs), the two aren't directly tied together, since it's possible to get a hit (or several hits), without giving up any runs. There could theoretically exist pitchers who give up many hits, but give up few bases and thus not many runs. Additionally, there could be pitchers who give up very few hits, but give up large amounts of bases, and especially home runs, and thus have a very high ERA but a low HPO.
 
 # Theory needed to carry out SLR
 
-## Main result 1
+It is my belief that a pitcher's HPO tends to increase as their ERA does. Thus, when choosing between pitchers, a pitcher with a higher ERA will tend to give up more hits. I would like to create a model which relates the rate at which a pitcher gives up hits (HPO) to the pitchers, ERA, so I can use the more ubiquitous ERA to predict which pitchers are likely to give up more hits.
+
+As with many sources of real data, however, an unknown number of factors and randomness affects a pitcher's ability to throw pitches, even if we assume that the skill of the pitcher does not change (or changes in a predictable career-aging curve (@CITATIONNEEDED)). In other words, in the preliminary plots, there seemed to be a vaguely linear association, but all of the points did *not* line up in a straight line. Because of this, a deterministic model cannot be used, and instead I will need to construct a probabilistic model.
+
+One type of probabilistic model is simple linear regression (SLR). SLR assumes that there is a linear association between the variables, and uses data driven methods to construct a line which can be used to make predictions about y given x and a few constants. In the context of this analysis, we will assume that a pitcher's HPO is a function of their ERA, so our $Y$ (dependent) variable is HPO, and our $X$ (independent) variable is ERA. When the natural randomness of a pitcher is involved we must also add some amount of error $\epsilon$. Thus,
+
+$$
+Y_i = \beta_0 + \beta_1X_i + \epsilon_i
+$$
+where $i$ refers to a specific value of our independent variable (ERA). The regression line $Y_i = \beta_0 + \beta_1X_i$ is the expected value of $Y_i$ given $X_i$ since the epsilon error term can be assumed to be a normal random variable with $\mu = 0$ and $\sigma_\epsilon$ (@SLR). Although there is an independent and dependendent variable, this model does not imply that X causes Y, or vice versa. This analysis simply looks for an association between the two variables, not a causal relationship. This line of best fit is built on a variety of assumptions about the probability distribution of $\epsilon$, since it is needed to estimate the parameters $\beta_0$ and $\beta_1$. These assumptions are as follows (@MS):
+
+ - $\mu_\epsilon = 0$; the mean of $\epsilon$ is 0
+ - $V(\epsilon|X_i) = \sigma^2_\epsilon$; the variance of $\epsilon$ does not depend on $X$. No matter the value of X, the variance of $\epsilon$ is constant.
+ - $\epsilon \sim N$; $\epsilon$ is normally distributed.
+ - $\epsilon$ at any two observations are independent. Thus, the error at one observation has no effect on the errors at other observations.
 
 
-## Main result 2
-## Main result 3 etc
+# Estimating Parameters
+
+In order to estimate the parameters $/beta_0$ and $\beta_1$, I will now use the Method of Least Squares. This involves finding the line in which the deviations from the expected value of the model (the regression line) are minimized. If all of the assumptions about $\epsilon$ which I outlined previously are true, the Method of Least Squares produces a line which is identical to the Method of Maximum Likelihood (@MS). Since the population least squares line is represented by $Y_i = \beta_0 + \beta_1X_1 + \epsilon_i$, my predicted line base on the 2019 MLB season (my sample) will be $\hat{Y_i} = \hat{\beta_0} + \hat{\beta_1}X_i + \epsilon_i$. For each $X_i$, I am able to calculate a residual $\hat{\epsilon}$, which is the deviation of the data point from my least squares regression line.
+$$
+ \hat\epsilon =  (y_i - \hat{y_i}) = (y_i - \hat{\beta_0} + \hat{\beta_1}x_i)
+$$
+Therefore, the least squares regression line will be the one which minimizes the sum of the squares for error (SSE). The SSE is given by
+
+$$
+\text{SSE} = \sum\limits_{i = 1}^n \hat{\epsilon}^2=  \sum\limits_{i = 1}^n (y_i - \hat{\beta_0} + \hat{\beta_1}x_i)^2
+$$
+I am searching for the least-squares estimates of the population parameters $\beta_0$ and $\beta_1$ which minimize the SSE. I expect that when I find these values, the residuals will be normally distributed with a mean of 0 and a constant variance.
+
+```{r}
+hpo.lm <- with(pt, lm(ERA ~ HPO))
+sm <- summary(hpo.lm)
+betas <- sm$coefficients
+```
+
+The values predicted by this linear model are $\hat{\beta_0} = `r round(betas[1],4)`$ and $\hat{\beta_1} = `r round(betas[2],4)`$.
+This model also has an $r^2$ value of $`r round(sm\$r.squared, 4)``$. $r^2$, or the Coefficient of Determination, is a measure of the proportion of the variation in the population is accounted for in your model (@MS). It will become important further in this analysis, when we analyze whether this linear model is a useful predictor of a pitcher's HPO.
+
+
 
 # Validity with mathematical expressions
+
 
 
 The following function was taken from [https://rpubs.com/therimalaya/43190](https://rpubs.com/therimalaya/43190)
