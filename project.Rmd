@@ -79,9 +79,6 @@ library(Lahman)
 ptall <- Lahman::Pitching
 pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 data is analyzed
 
-ptall <- pt
-pt <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers
-
 pt$HPO <- pt$H/pt$IPouts #add hits per out column
 
 library(DT)
@@ -132,6 +129,10 @@ pt <- cbind(pt, eff_min_vel)
 pt <- cbind(pt, babip)
 pt <- cbind(pt, takes)
 pt <- cbind(pt, launch_angle)
+
+
+ptmin30 <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers for preliminary plots
+
 ```
 
 ### Plot data
@@ -197,7 +198,7 @@ library(ggplot2)
 library(patchwork)
 
 createLowessForHPO <- function(column, xvar){
-  g <- ggplot(pt, aes(x = column, y = HPO)) + geom_point()
+  g <- ggplot(ptmin30, aes(x = column, y = HPO)) + geom_point()
   g = g + geom_smooth(method = "loess")
   g = g + ggtitle(paste(xvar ," versus Hits given up Per Out"))
   g = g + ggtitle(xvar)
@@ -206,9 +207,9 @@ createLowessForHPO <- function(column, xvar){
 }
 
 
-a = createLowessForHPO(pt$ERA, "Earned Run Average")
-b = createLowessForHPO(pt$xba, "Expected Batting Average")
-c = createLowessForHPO(pt$babip, "Batting Average for Balls in Play")
+a = createLowessForHPO(ptmin30$ERA, "Earned Run Average")
+b = createLowessForHPO(ptmin30$xba, "Expected Batting Average")
+c = createLowessForHPO(ptmin30$babip, "Batting Average for Balls in Play")
 
 a
 b
@@ -302,20 +303,122 @@ I am searching for the least-squares estimates of the population parameters $\be
 hpo.lm <- with(pt, lm(ERA ~ HPO))
 sm <- summary(hpo.lm)
 betas <- sm$coefficients
+rsq <- sm$r.squared
 ```
 
 The values predicted by this linear model are $\hat{\beta_0} = `r round(betas[1],4)`$ and $\hat{\beta_1} = `r round(betas[2],4)`$.
-This model also has an $r^2$ value of $`r round(sm\$r.squared, 4)``$. $r^2$, or the Coefficient of Determination, is a measure of the proportion of the variation in the population is accounted for in your model (@MS). It will become important further in this analysis, when we analyze whether this linear model is a useful predictor of a pitcher's HPO.
+This model also has an $r^2$ value of $`r round(rsq, 4)`$. $r^2$, or the Coefficient of Determination, is a measure of the proportion of the variation in the population is accounted for in your model (@MS). It will become important further in this analysis, when we analyze whether this linear model is a useful predictor of a pitcher's HPO.
 
+# Check for outliers
 
+```{r}
+g <- ggplot(data = pt, aes(x = ERA, y = HPO))
+g = g + geom_point()
+g = g + stat_smooth(method = "lm", col = "red")
+g
+```
+
+As you can see, the plot of our data with the regression line looks significantly different than our preliminary plot. This is because I removed all pitchers who had pitched less than 30 full games worth of innings. At this point, however, I would like to take a more mathematical approach to removing outliers, in order to create the most accurate linear model that I can. This dataset lends itself to outliers since baseball position players sometimes pitch an inning or two in certain situations.
+
+To find these outliers, I will use a metric called Cook's distance. This is a way of quantifying the influence that a data point has. Cook's distance takes into account the size of each datum's residual, as well as the leverage that a data point has on the regression line (@Cooks). 
+
+```{r}
+cd <- cooks.distance(hpo.lm)
+cooksdf <- as.data.frame(cd)
+cooksdf$obs <- c(1:length(cd))
+
+cp <- ggplot(cooksdf, aes(x = obs, y = cd))
+cp = cp + geom_col()
+cp = cp + xlim(0, length(pt$playerID) + 5) #+ ylim(0, 1)
+cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
+cp
+```
+
+As you can see from the plot, there are a few observations which have an excessively large effect on the regression. I will remove any datum which has a Cook's Distance larger than 0.004. The reason I chose 0.004, is because heuristically, a cook's distance over $\frac{1}{n}$, where $n$ is the number of observations, is too high (@statology). Since I have 930 data points, $\frac{1}{n} \approx 0.004$ As you can see, observation 893 exceeds this by a colossal margin. This observation is Aaron Wilkerson, a reliever who only pitched 16 innings for the Brewers during the 2019 season. As a reliever only briefly pulled up from the minor leagues, Wilkerson perfectly exemplifies why this data set is prone to outliers. Wilkerson was thrown into difficult pitching situations, very sporadically, and didn't seem to have the skill to hang in the major leagues. 
+
+Because Aaron Wilkerson's gigantic Cook's distance throws off the scale of the Cook's plot, below is one where some data isn't shown, but it shows that there are multiple data points with a Cook's Distance over 0.004. 
+
+```{r}
+cd <- cooks.distance(hpo.lm)
+cooksdf <- as.data.frame(cd)
+cooksdf$obs <- c(1:length(cd))
+
+cp <- ggplot(cooksdf, aes(x = obs, y = cd))
+cp = cp + geom_col()
+cp = cp + xlim(0, length(pt$playerID) + 5) + ylim(0, 0.3)
+cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
+cp = cp + geom_hline(yintercept = 0.004, col = "red")
+cp
+```
+
+# Development of model without Outliers
+
+```{r}
+#remove data with an excessively high Cook's Distance
+baddata <- subset(cooksdf, cd >= 0.004, select = obs)$obs
+ptf <- pt[-c(baddata),]
+
+hpof.lm <- with(ptf, lm(ERA ~ HPO))
+smf <- summary(hpof.lm)
+betas <- smf$coefficients
+rsq <- smf$r.squared
+rsq
+sm$r.squared
+```
+
+In the above block of code, I have produced another linear model, this time with the potential outliers removed. The values predicted by this linear model are $\hat{\beta_0} = `r round(betas[1],4)`$ and $\hat{\beta_1} = `r round(betas[2],4)`$.
+This model also has an $r^2$ value of $`r round(rsq, 4)`$. $r^2$.
+
+```{r}
+g <- ggplot(data = ptf, aes(x = ERA, y = HPO))
+g = g + geom_point()
+g = g + stat_smooth(method = "lm", col = "red")
+g
+```
+
+As you can see, some data points have been removed as outliers. That data point near the edge was not removed despite having high leverage. This is because it is so close to the line that it has a very low residual.
+
+The higher $r^2$ value of this cleaned data indicates that it's a better fit for the data.
 
 # Validity with mathematical expressions
 
+Now that I have an estimate for the values in my linear model, it's important to analyze whether the assumptions that this was built on are true. This section will focus on the theory behind verifying assumptions; the next section will focus on actually verifying the assumptions in this data set.
 
+If you recall an earlier section, there are four assumptions on which my model is built. These assumptions involve the distribution of the error, specifically that it is normally distributed, with a mean of zero, and a constant variance. Additionally, all errors should be independent of all other errors. To verify these assumptions, I will first use the residuals to find the Residual Sum of Squares (RSS). It is calculated using the following equation, where $\hat{y}$ is a value predicted by our regression line, and each $y_i$ is a data point.
+
+$$
+\text{RSS} = \sum\limits_{i=1}^n (\hat{y}_i - y_i)^2
+$$
+
+After this, I will find the Model Sum of Squares (MSS), which is the sum of the distances between the model's predicted value and the mean of the dependent variable at each data point, squared.
+
+$$
+\text{MSS} = \sum\limits_{i=1}^n (\hat{y}_i - \overline{Y})^2
+$$
+
+The third metric I would like to find is the Total Sum of Squares (TSS), which is the sum of the squared differences between each data point and the mean of the data.
+
+$$
+\text{TSS} = \sum\limits_{i=1}^n (y_i - \overline{Y})^2
+$$
+
+In order to better explain these variables and their relationship. The $R^2$ value which I mentioned earlier is calculated as $\frac{\text{MSS}}{\text{TSS}}$. 
+
+After this analysis is complete, I intend to plot the residuals to show that there is no obvious pattern in them. Then, I will use the Shapiro-Wilk test for normality to show that the errors are normally distributed. 
 
 The following function was taken from [https://rpubs.com/therimalaya/43190](https://rpubs.com/therimalaya/43190)
 
-## Checks on validity
+# Actual tests for Validity
+
+In this section, I will put the theory introduced in the last section to work on our data set. 
+
+```{r}
+d <- ggplot(data = ptf, aes(x = HPO, y = ERA))
+d = d + geom_point()
+d = d + ggtitle("ERA vs HPO for 2019 MLB Pitchers")
+d
+```
+
 
 ### Straight trend line  
 
