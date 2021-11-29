@@ -81,6 +81,10 @@ pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 dat
 
 pt$HPO <- pt$H/pt$IPouts #add hits per out column
 
+pt <- subset(pt, pt$IPouts >= 5)
+pt <- subset(pt, is.finite(pt$HPO))
+
+
 library(DT)
 datatable(subset(pt, select = c("playerID", "teamID", "ERA", "W", "L", "HPO")))
 
@@ -261,7 +265,7 @@ shinyApp(ui, server)
 
 For the sake of the preliminary analysis, I've filtered the pitching data to only include pitchers who've pitched a total of 30 games over their whole career. Heuristically, this allows me to minimize the effect on outliers in the data, although this is an oversimplification, and may exclude legitimate data. This is an acceptable sacrifice to make for the preliminary plots, however, since later in this analysis I'll take a more data-driven approach to eliminating outliers. Right now, I'm just looking for any kind of association.
 
-As you can see, these three charts have vaguely linear patterns within them. Earned Run Average (ERA) refers to the amount of runs that a pitcher has, on average, given up per nine innings pitched. Expected batting average and Batting Average for Balls in Play are relatively new metrics to baseball, introduced through the Statcast system installed in all MLB ballparks in 2015 (@CITATIONNEEDED). Expected batting average refers to the likelihood that a batted ball becomes a hit, including home runs. Batting Average for Balls in Play (BABIP), however, refers to the liklihood that a batted ball in play (excluding home runs) becomes a hit. 
+As you can see, these three charts have vaguely linear patterns within them. Earned Run Average (ERA) refers to the amount of runs that a pitcher has, on average, given up per nine innings pitched. Expected batting average and Batting Average for Balls in Play are relatively new metrics to baseball, introduced through the Statcast system installed in all MLB ballparks in 2015 (@sc). Expected batting average refers to the likelihood that a batted ball becomes a hit, including home runs. Batting Average for Balls in Play (BABIP), however, refers to the liklihood that a batted ball in play (excluding home runs) becomes a hit. 
 
 Of these three, I think that ERA is the most logical to analyze, given my goal to predict hits per inning given up. The other two are similar to the expected batting average against a hitter which, like Hits Per Out, is a statistic base on the amount of hits a pitcher gives up. 
 
@@ -271,7 +275,7 @@ Although ERA is affected by hits (hits earn runs), the two aren't directly tied 
 
 It is my belief that a pitcher's HPO tends to increase as their ERA does. Thus, when choosing between pitchers, a pitcher with a higher ERA will tend to give up more hits. I would like to create a model which relates the rate at which a pitcher gives up hits (HPO) to the pitchers, ERA, so I can use the more ubiquitous ERA to predict which pitchers are likely to give up more hits.
 
-As with many sources of real data, however, an unknown number of factors and randomness affects a pitcher's ability to throw pitches, even if we assume that the skill of the pitcher does not change (or changes in a predictable career-aging curve (@CITATIONNEEDED)). In other words, in the preliminary plots, there seemed to be a vaguely linear association, but all of the points did *not* line up in a straight line. Because of this, a deterministic model cannot be used, and instead I will need to construct a probabilistic model.
+As with many sources of real data, however, an unknown number of factors and randomness affects a pitcher's ability to throw pitches, even if we assume that the skill of the pitcher does not change (or changes in a predictable career-aging curve (@aging)). In other words, in the preliminary plots, there seemed to be a vaguely linear association, but all of the points did *not* line up in a straight line. Because of this, a deterministic model cannot be used, and instead I will need to construct a probabilistic model.
 
 One type of probabilistic model is simple linear regression (SLR). SLR assumes that there is a linear association between the variables, and uses data driven methods to construct a line which can be used to make predictions about y given x and a few constants. In the context of this analysis, we will assume that a pitcher's HPO is a function of their ERA, so our $Y$ (dependent) variable is HPO, and our $X$ (independent) variable is ERA. When the natural randomness of a pitcher is involved we must also add some amount of error $\epsilon$. Thus,
 
@@ -300,14 +304,15 @@ $$
 I am searching for the least-squares estimates of the population parameters $\beta_0$ and $\beta_1$ which minimize the SSE. I expect that when I find these values, the residuals will be normally distributed with a mean of 0 and a constant variance.
 
 ```{r}
-hpo.lm <- with(pt, lm(ERA ~ HPO))
+hpo.lm <- with(pt, lm(HPO ~ ERA))
 sm <- summary(hpo.lm)
 betas <- sm$coefficients
 rsq <- sm$r.squared
+rsqa <- sm$adj.r.squared
 ```
 
 The values predicted by this linear model are $\hat{\beta_0} = `r round(betas[1],4)`$ and $\hat{\beta_1} = `r round(betas[2],4)`$.
-This model also has an $r^2$ value of $`r round(rsq, 4)`$. $r^2$, or the Coefficient of Determination, is a measure of the proportion of the variation in the population is accounted for in your model (@MS). It will become important further in this analysis, when we analyze whether this linear model is a useful predictor of a pitcher's HPO.
+This model also has an $r^2$ value of $`r round(rsq, 4)`$. $r^2$, or the Coefficient of Determination, is a measure of the proportion of the variation in the population is accounted for in your model (@MS). It will become important further in this analysis, when we analyze whether this linear model is a useful predictor of a pitcher's HPO. It's adjusted $r^2$ value is $`r round(rsqa, 4)`$, which as you can see is very close to the $r^2$ value. Adjusted $r^2$ also takes into account the amount of data points in the set.
 
 # Check for outliers
 
@@ -334,9 +339,7 @@ cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Co
 cp
 ```
 
-As you can see from the plot, there are a few observations which have an excessively large effect on the regression. I will remove any datum which has a Cook's Distance larger than 0.004. The reason I chose 0.004, is because heuristically, a cook's distance over $\frac{1}{n}$, where $n$ is the number of observations, is too high (@statology). Since I have 930 data points, $\frac{1}{n} \approx 0.004$ As you can see, observation 893 exceeds this by a colossal margin. This observation is Aaron Wilkerson, a reliever who only pitched 16 innings for the Brewers during the 2019 season. As a reliever only briefly pulled up from the minor leagues, Wilkerson perfectly exemplifies why this data set is prone to outliers. Wilkerson was thrown into difficult pitching situations, very sporadically, and didn't seem to have the skill to hang in the major leagues. 
-
-Because Aaron Wilkerson's gigantic Cook's distance throws off the scale of the Cook's plot, below is one where some data isn't shown, but it shows that there are multiple data points with a Cook's Distance over 0.004. 
+As you can see from the plot, there are a few observations which have an excessively large effect on the regression. I will remove any datum which has a Cook's Distance larger than $\frac{1}{873} \approx 0.001$. The reason I chose 0.004, is because heuristically, a cook's distance over $\frac{1}{n}$, where $n$ is the number of observations, is too high (@statology). 
 
 ```{r}
 cd <- cooks.distance(hpo.lm)
@@ -345,9 +348,9 @@ cooksdf$obs <- c(1:length(cd))
 
 cp <- ggplot(cooksdf, aes(x = obs, y = cd))
 cp = cp + geom_col()
-cp = cp + xlim(0, length(pt$playerID) + 5) + ylim(0, 0.3)
+cp = cp + xlim(0, length(pt$playerID) + 5) + ylim(0, 0.1)
 cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
-cp = cp + geom_hline(yintercept = 0.004, col = "red")
+cp = cp + geom_hline(yintercept = (1/873), col = "red")
 cp
 ```
 
@@ -355,24 +358,26 @@ cp
 
 ```{r}
 #remove data with an excessively high Cook's Distance
-baddata <- subset(cooksdf, cd >= 0.004, select = obs)$obs
+baddata <- subset(cooksdf, cd >= (1/873), select = obs)$obs
 ptf <- pt[-c(baddata),]
 
-hpof.lm <- with(ptf, lm(ERA ~ HPO))
+ptf <- subset(ptf, is.finite(HPO))
+
+hpof.lm <- with(ptf, lm(HPO ~ ERA))
 smf <- summary(hpof.lm)
 betas <- smf$coefficients
 rsq <- smf$r.squared
-rsq
-sm$r.squared
+rsqa <- smf$adj.r.squared
 ```
 
 In the above block of code, I have produced another linear model, this time with the potential outliers removed. The values predicted by this linear model are $\hat{\beta_0} = `r round(betas[1],4)`$ and $\hat{\beta_1} = `r round(betas[2],4)`$.
-This model also has an $r^2$ value of $`r round(rsq, 4)`$. $r^2$.
+This model also has an $r^2$ value of $`r round(rsq, 4)`$. It has an adjusted $r^2$ value of $`r round(rsqa, 4)$, however. Adjusted $r^2$ is a similar metric to $r^2$, in that it is a measure of how well the model fits the data. Adjusted $r^2$, however, accounts for the amount of data points in your data set.
 
 ```{r}
 g <- ggplot(data = ptf, aes(x = ERA, y = HPO))
 g = g + geom_point()
 g = g + stat_smooth(method = "lm", col = "red")
+g = g + ggtitle("Scatterplot with Outliers Removed")
 g
 ```
 
@@ -410,71 +415,173 @@ The following function was taken from [https://rpubs.com/therimalaya/43190](http
 
 # Actual tests for Validity
 
-In this section, I will put the theory introduced in the last section to work on our data set. 
+In this section, I will put the theory introduced in the last section to work on our data set. The scatterplot at the end of the previous section seems to illustrate that a simple linear model is a good fit for the data, but many statistics exist to test whether this model is the best one, and to test whether the assumptions that I made when creating the model and removing its outliers are true.
+
+## Residual Plot
 
 ```{r}
-d <- ggplot(data = ptf, aes(x = HPO, y = ERA))
-d = d + geom_point()
-d = d + ggtitle("ERA vs HPO for 2019 MLB Pitchers")
-d
+e <- ggplot(ptf, aes(x = ERA, y = HPO))
+e = e + geom_point()
+e = e + geom_smooth(method = 'lm')
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=hpof.lm$fitted.values))
+e
 ```
 
+The residuals, which were used to calculate RSS, and therefore TSS can be visulized as the distance between each point and the regression line, drawn on the plot above. It is the distance between $y$ and $\hat{y}$ for each data point Our plot was constructed so that the sum of the squares of the distances of these line segments is minimized. 
 
-### Straight trend line  
+## Means Plot
 
-#### Use trendscatter
+```{r}
+e <- ggplot(ptf, aes(x = ERA, y = HPO))
+e = e + geom_point()
+e = e + geom_smooth(method = 'lm')
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=hpof.lm$fitted.values, yend=mean(hpof.lm$fitted.values)))
+e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)))
+e
+```
 
-### Errors distributed Normally
+The above plot is a visualization of the mean sum of squares (MSS) of the model. Ultimately, the sum of the above plotted line segments is the MSS, which can be used to calculate the $R^2$ value of the model. It is the distance from $\hat{y}$ to $\bar{y}$ for each data point.
 
-$$\epsilon_i \sim N(0,\sigma^2)$$
+## TSS Plot
 
+```{r}
+e <- ggplot(ptf, aes(x = ERA, y = HPO))
+e = e + geom_point()
+#e = e + geom_smooth(method = 'lm')
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=mean(hpof.lm$fitted.values)))
+e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)))
+e
+```
 
+The Last metric, the total sum of squares is the distance between $y$ and $\bar{y}$ for every data point. These three metrics can be used to calculate the $R^2$ value of this model (covered in the previous section), which R auto-magically did behind the scenes. 
 
-#### Shapiro-wilk
+### Error Assumptions
 
-### Constant variance
+Now I need to verify a 4 assumptions that have to do with my error, all of which are encapsulated in the statement below.
 
-#### Residual vs fitted values
+$$\epsilon_i \stackrel{\text{iid}}{\sim} N(0,\sigma^2)$$
 
-#### trendscatter on Residual Vs Fitted
+In particular, I need to verify that the errors $\epsilon$ are indeed normally distributed, do actually have a mean of 0 (or reasonably close to 0), and have a constant variance. Additionally, all errors should be independent of all other errors.
 
-### Zero mean value of $\epsilon$
+## Normality, Independence, and Constant Variance
 
-### Independence of data 
+```{r}
+s20x::normcheck(hpof.lm, shapiro.wilk = TRUE)
+```
 
-# Model selection if you compared models 
+In this test, the null hypothesis $H_0$ is that the data is normally distributed.
+$p > \alpha = 0.05$, so we are unable to reject $H_0$ and conclude that it's plausible that the errors are normally distributed, with a constant mean and variance.
 
-## Use adjusted $R^2$ 
-$$R_{adj}^2 =$$
+## Mean of 0
 
+```{r}
+mueps <- mean(hpof.lm$residuals)
+```
 
+The mean of the errors is $`r mueps `$, which is so close to zero that my assumption is effectively satisfied.
 
-# Analysis of the data
+# Assesing the Use of a Linear Model
 
-## Make sure you include many great plots
+## Loess Smooth Plot for the data
 
-## Add the trend to the data
+```{r}
+f <- ggplot(data = ptf, aes(x = ERA, y = HPO))
+f = f + geom_point()
+f = f + geom_smooth(method = "loess", col = "blue", fill = "orange")
+f = f + ggtitle("Smooth Trend Line for Pitcher's HPO vs ERA with Outliers Removed")
+f
+```
 
+As you can see, with our adjusted data set, a smooth trendline can be drawn. The line on this plot is _not_ a regression line. It's simply a smooth-ish line drawn using an algorithm called the LOESS Algorithm. The orange band shown on this plot is the area where a regression line could be reasonably drawn. It's most visible on this plot towards the right side, where there are fewer data points from which a residual can be drawn. As you can see, the trend line seems like it should be one straight line, showing that my choice of model was appropriate. It also has a reasonably small margin of error. 
 
-## Summary lm object
+## Residual Plot
 
-### Interpretation of all tests
-### Interpretation of multiple R squared
-### Interpretation of all point estimates
-## Calculate cis for $\beta$ parameter estimates
-### Use of `predict()`
-### Use of `ciReg()`
+```{r}
+h <- ggplot(data = ptf, aes(x = ERA, y = hpof.lm$residuals))
+h = h + geom_point(col = "blue")
+h = h + geom_hline(yintercept = 0)
+h = h + ylab("Residuals")
+h
+```
 
-### Check on outliers using cooks plots
+As you can see from the plot above, there is no clear pattern in the residuals. The mean of the residuals seems to be roughly 0 (where I've inserted a horizontal line), and it's pretty much symmetrical on the y axis. This shows that there is no significant deviation from the pattern accounted for by the model.
 
-Remember to interpret this plot and all other plots
+## Residuals plotted versus fitted values
 
+```{r}
+j <- ggplot(data = ptf, aes(x = hpof.lm$fitted.values, y = hpof.lm$residuals))
+j = j + geom_point()
+j = j + geom_smooth(method = "loess")
+j = j + xlab("Fitted Values") + ylab("Residuals")
+j
+```
 
+The uniformity that we see around 0 shows that this linear model is appropriate for the dataset. The large curve away from 0 could be construed as evidence of needing a different model, but in the context of our analysis, I don't think this is the case. The reason that the model is pulled in this direction is because of that single data point, a pitcher named Ryan Dull, who had an abysmal ERA of 19.29 during the 7 outs which he earned with the New York Yankees (@ryandull). He wasn't removed as an outlier because the cook's distance of his data point was small enough. This means that his season did not have a big enough effect on the overall trend line to be considered an outlier. Forcing our model to more closely represent his season, however, would likely cause overfitting of the data and worsen our model's predictive power, since he only pitched for a very small amount of time. 
+
+# Analysis of Linear Model
+
+## Point Estimates and Model Summary
+
+```{r}
+summary(hpof.lm)
+```
+Above is a printed summary of the linear model, from which we can quantify our regression line and make predictions. Our regression line is $\hat{y} = \hat{\beta}_0 + \hat{\beta}_1x = `r round(betas[1],4)` + `r round(betas[2],4)`x$
+
+The point estimates for $\hat{\beta_0}$ and $\hat{\beta_1}$ are given by this summary, too. They correspond to $\hat{\beta_0}$ and $\hat{\beta_1}$ in the above regression line. They represent the estimates of these two values, but in the next section, we will use a confidence interval to make a probabilistic statement about these values. 
+
+## Confidence Interval
+
+```{r}
+s20x::ciReg(hpof.lm, conf.level=0.95, print.out=TRUE)
+```
+
+The above function constructed a 95% confidence interval for the values $\hat{\beta_0}$ and $\hat{\beta_1}$. This means that if we used the same process to construct a regression line for data sampled from the same population (a different baseball season, perhaps) over and over, an effectively infinite number of times, 95% of the confidence intervals constructed would contain the true population values for $\hat{\beta_0}$ and $\hat{\beta_1}$, and 5% of them would not. This can be more concisely communicated by saying that we are "95% confident" that the population parameter falls in this interval, though this can cause confusion since the confidence interval does _not_ imply a probability.
+
+Regardless, we are 95% confident that the true population value for $\hat{\beta_0}$ falls between 0.17673 and 0.19207, and that the true population value for  $\hat{\beta_1}$ falls between 0.02878 and 0.03171. 
+
+# Predictive Use of the Model
+
+Now that the preceding analysis has been completed, it's time to apply the model on a practical level. If I choose a pitcher, I should be able to use this regression line to predict the rate at which they will give up hits, and therefore compare them to other pitchers and increase my liklihood of keeping my streak. 
+
+Since it's currently the baseball off season, I will look retroactively at a call that had to be made without the help of this model. Take for instance August 1st, 2021. On this day, the Milwaukee Brewers were scheduled to play the Atlanta Braves, who were starting the pitcher Charlie Morton, who at the time had an ERA of 3.69. The lead off hitter for the Brewers, Tyrone Taylor, would likely face Morton a few times, so knowing the HPO of the pitcher is very useful.
+
+```{r}
+predict(hpof.lm, data.frame(ERA=c(3.69)))
+```
+
+The model predicts that Charlie Morton will give up hits at a rate of 0.2960087 hits per out, or about 3 outs pitched before he gives up a hit.
+
+On the same day, Jean Segura was gearing up to be the lead off batter for the phillies, against Pirate's Starting Pitcher Mitch Keller, who at the time had an ERA of 7.05. 
+
+```{r}
+predict(hpof.lm, data.frame(ERA=c(7.05)))
+```
+
+Our model predicts that Keller will give up hits at a rate of 0.3976367 hits per out, or around 2.5 outs pitched before he gives up a hit. 
+
+Over the course of a game, this difference in HPO shows in the other teams hits. Jean Segura had a batting average of 0.266 during the 2020 season, and Tyrone Taylor had a batting average of 0.237, eerily close to Segura's. However, If I had run this model for the pitchers that both players would certainly face at least once (likely multiple times), it would have favored choosing Segura over Taylor. In reality, Jean Segura got two hits on August 1st, while Tyrone Taylor got no hits. 
+
+There are, of course, examples where my model makes a prediction that ends up breaking my streak rather than maintaining it, but on a higher level, the information from this model can be used in a meaningful way to help choose batters and (hopefully) maintain my streak.
+
+Data about Jean Segura, Tyrone Taylor, Charlie Morton, and Mitch Keller for this section was manually collected from both [mlb.com](mlb.com) and [baseball-almanac.com](baseball-almanac.com). (@mlb.com) (@baseballalmanac)
 
 # Conclusion
-## Answer your research question
+
+## Research Question and Implications
+
+I set out to find a relationship between a pitcher's ERA, and the rate at which the same pitcher gives up hits. Based on the SLR which I have performed, a linear model is appropriate and allows for meaningful predictions to be made. Although there are many other factors which may also be factored into a batter's ability to get a hit, the information from this model will actually help me with maintaining my streak, since it allows for an analysis of a pitcher's average propensity to give up hits given their ERA. 
+
 ## Suggest ways to improve model or experiment
 
+At the end of the day, the practical use for this entire analysis is to be able to predict the rate of hits that a pitcher gives up, given their ERA, which is a standard and ubiquitous statistic. For my purposes (coming closer to beating the streak), further analysis will still have to be done on different sabermetric data to predict whether a batter will face a pitcher, and what other factors may be affecting the pitcher or the batter.
+
+When I constructed the preliminary plots section, I was surprised to find that there didn't seem to be any meaningful relationship between a pitcher's spin rate and the amount of hits they give up. I was surprised by this, since throughout the past season, there has been lots of news about how the MLB had been cracking down on adhesive substances which professional pitchers sometimes use to alter the spin rate of their pitches and gain an edge in their game (@stickystuff). It was pointed out to me recently, however, that the average spin rate doesn't give you meaningful information since many pitchers rely on an arsenal of different kinds of pitches, all of which are meant to fly differently. In the future, I would like to perform an analysis of how pitcher's spin rate affects their HPO, but I want to stratify the data based on pitch type. This analysis, combined with a simple observation of what proportion of each pitch type a pitcher tends to throw, could have significant predictive power which isn't shown in more common statistics such as ERA. 
+
+Also, because of the aforementioned actions of the MLB against adhesive substances, I'd imagine that pitchers may develop different trends, so the predictive power of the 2019 season may be nominal when applied to the 2022 season and beyond.
+
+In summary, although this model is useful, it isn't the end-all of HPO prediction, and I intend to conduct more thorough analyses on different factors which affect hits, preferably with a future season. It's likely that the final product that I'm after is a model which takes into account many factors which baseball experts speculate might affect hitting. Since baseball fields have nonstandard dimentions, for instance, some quantification of the ballpark may be necessary (@parks). Additionally, baseball is a mental game, and often the skill of a player ebbs and flows throughout the season. Some kind of rolling-average metric may be necessary to effectively model a player's hitting. Player's performances can also be modeled to follow "age curves" which can be predicted by comparing players to past players who were statistically similar to them (@aging). Working these factors into the model may also turn out to increase it's accuracy.
+
+In summary, this analysis is useful, but only to a point. I've only scratched the surface of sabermetrics, and if I want to have a reasonable probability of beating the streak, it's going to take more than just ERA to get the job done. This is the end of this analysis, but it's just the beginning of a more rigorous model which I intend to construct using MLB data. 
 
 # References
   
