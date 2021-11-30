@@ -1,7 +1,5 @@
 ---
-title: "Project 2"
-author: "Luke Terry"
-date:  "`r format(Sys.time(), '%d %B, %Y')`"
+always_allow_html: true
 output:
   html_document:
     code_folding: show
@@ -14,9 +12,6 @@ output:
     theme: journal
     toc: yes
     toc_float: yes
-  word_document:
-    toc: yes
-    toc_depth: 4
   pdf_document:
     df_print: kable
     fig_caption: yes
@@ -25,8 +20,14 @@ output:
     highlight: tango
     toc: yes
     toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: 4
+author: "Luke Terry"
+date:  "`r format(Sys.time(), '%d %B, %Y')`"
+title: "Project 2"
 bibliography: project.bib
-abstract: This project is all about applications of SLR to real data using R
+abstract: This project is all about applications of SLR to real data using R. I will be using various pitching data, most prominently from the Lahman Database (contained in an R library), but also from MLB's statcast, Baseball Reference, and directly from MLB.com. Throughout the project, I will apply probability theory and simple linear regression to the data at hand, specifically looking for a relationship between a pitcher\'s earned run average and the rate at which they give up hits relative to earning outs. My objective is to better predict which pitchers will give up hits.
 ---
 
 <center>
@@ -39,6 +40,8 @@ abstract: This project is all about applications of SLR to real data using R
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
 library(leaflet)
 library(dplyr)
 ```
@@ -63,7 +66,15 @@ Compared to other sports, baseball and statistics have a close relationship. Per
 
 There even exists a special term for the art of analyzing baseball statistics: sabermetrics. It was coined by Bill James, and influential statistician in the field, and its name refers to SABR, and acronym for the society of american baseball research (@NumbersGame)
 
-## What are the variables? 
+
+<center>
+
+![Bill James in 2010](pics/bill-james.jpg "Bill James in 2010"){ width=50% }
+
+</center>
+
+
+## Variables
 
 Each experimental unit in this case is one pitcher, or rather how one pitcher performed over the course of the 2019 season.
 
@@ -139,17 +150,7 @@ ptmin30 <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers for 
 
 ```
 
-### Plot data
-
-```{r carcharacteristics, fig.height = 5, fig.cap = "MTCARS",fig.align='center',fig.cap="Graph of data with loess smoother"}
-# library(ggplot2)
-# g = ggplot(mtcars, aes(x = disp, y = mpg, color = cyl)) + geom_point()
-# g = g + geom_smooth(method = "loess")
-# g
-```
-
-
-## How were the data collected? 
+## Data Collection
 
 Luckily for me, baseball's extra close relationship with statistical scrutiny means that copious amounts of reliable sabermetric data are available from various sources online, free of charge.
 
@@ -157,13 +158,13 @@ The specific data which I am using is a nearly exhaustive record of traditional 
 
 The database was compiled from various sources by a team of volunteers, since it dates back to 1871. The season that I will focus on however (2019), was likely scraped from mlb.com since major league baseball now offers statistics in that online format.
 
-The data itself, however, was collected by a combination of volunteers and mlb staff. 
+The data itself, however, was mostly collected by a combination of volunteers and mlb staff. Certain physical characteristics of pitches are also automatically collected by sensors and cameras.
 
 ## Why was it gathered? 
 
 At its core, the data here was gathered to help mlb coaches and team administrations make informed decisions. The ubiquity and accuracy of sabermetrics, however, have allowed the media to take a real interest in baseball statistics.
 
-## What is your interest in the data?
+## My Interest in the Data
 
 My personal interest in the data does not, however, lie in making informed decisions or predictions of overall baseball games. Each year, the MLB runs a competition called Beat the Streak. The rules are simple: each day, you are allowed to pick one or two batters who you think will get a hit that particular day. For each of your batters, if they get a hit, your streak goes up by 1. If they have an at bat, but fail to get a hit, your streak resets to 0. If you get a streak of 57 during the regular season, you win 5.6 million dollars (@bts). 
 
@@ -176,22 +177,20 @@ bt <- Lahman::battingStats() #initialize batting data
 #create histogram
 bt <- subset(bt, bt$AB > 30)
 g = ggplot(bt, aes(x=BA))
-g = g + geom_histogram(fill = "#a62919", binwidth = .1)
+g = g + geom_histogram(fill = "blue", binwidth = .1)
 g = g + xlab("Batting Averages")
 g = g + ylab("Frequency")
 g = g + ggtitle("Distribution of Seasonal Major League Batting Averages")
 g
 ```
 
-As you can see, it will be difficult to predict with certainty that a player gets a hit in a day. The average batting average for this historical dataset is 0.239. You can pick players with high batting averages, of course, but those players may not always get many plate appearances, and their batting averages don't get *that* much higher. For instance, the all time high batting average in this data set is still only 0.512. (The batting average is from Rudy Penderton's 1996 season with the Red Sox)
+As you can see, it will be difficult to predict with certainty that a player gets a hit in a day. The average batting average for this historical dataset is 0.239. You can pick players with high batting averages, of course, but those players may not always get many plate appearances, and their batting averages don't get *that* much higher. For instance, the all time high batting average in this data set is still only 0.512. (The batting average is from Rudy Pemberton's 1996 season with the Red Sox)
 
-If we assume that a player as good as Rudy Penderton can be chosen everyday (which is a generous assumption), and we assume that this player gets 4 plate appearances per game (which is the average amount that most places in the order will get, especially when players who have a higher batting average are chosen @PA), then the probability of a hit is about 94%^[This is because the probability for getting a hit that day follows a binomial distribution with 4 trials, and a probability of the batting average for each trial (0.512 in Penderton's case). The R command used to find this answer is 1-dbinom(0,4,0.512)].
+If we assume that a player as good as Rudy Pemberton can be chosen everyday (which is a generous assumption), and we assume that this player gets 4 plate appearances per game (which is the average amount that most places in the order will get, especially when players who have a higher batting average are chosen @PA), then the probability of a hit is about 94%^[This is because the probability for getting a hit that day follows a binomial distribution with 4 trials, and a probability of the batting average for each trial (0.512 in Pemberton's case). The R command used to find this answer is 1-dbinom(0,4,0.512)].
 
-Although this is a high probability, we have to keep in mind that we don't just want to predict whether a player will get a hit in a day, we want to predict whether a player will get a hit in a day *57 days in a row*. Thus if we were able to pick Rudy Penderton every day, the probability of attaining a 57 day streak is 0.00203, or about 1 in 500 ^[This is because the probability of choosing 57 correct days in a row can be estimated with the geometric distribution, with 1- ~94% (or ~6%) as the probability, and 57 as the number of failures before 1 "success" (or in this case day without a hit) occurs. The R command used to find this answer is dgeom(57,1-pb), where pb is an object containint the exact probability of Penderton getting a hit in a day as calculated in the previous paragraph.].
+Although this is a high probability, we have to keep in mind that we don't just want to predict whether a player will get a hit in a day, we want to predict whether a player will get a hit in a day *57 days in a row*. Thus if we were able to pick Rudy Pemberton every day, the probability of attaining a 57 day streak is 0.00203, or about 1 in 500 ^[This is because the probability of choosing 57 correct days in a row can be estimated with the geometric distribution, with 1- ~94% (or ~6%) as the probability, and 57 as the number of failures before 1 "success" (or in this case day without a hit) occurs. The R command used to find this answer is dgeom(57,1-pb), where pb is an object containint the exact probability of Pemberton getting a hit in a day as calculated in the previous paragraph.].
 
 This answer, however, assumes that each hit is a totally independent trial, where the only factor at play is the player's batting average. In reality, there are many factors which affect a baseball players ability to get hits. Conventional knowledge dictates that the pitcher which a batter is facing is the most important factor that dictates a player's ability to get a hit (apart from the players themselves). Because of this, this analysis will focus on what factors may cause a pitcher to give up more hits.
-
-### Include pictures `![](jpeg)`
 
 # Premliminary Plots and Interpretation of the data
 
@@ -202,8 +201,8 @@ library(ggplot2)
 library(patchwork)
 
 createLowessForHPO <- function(column, xvar){
-  g <- ggplot(ptmin30, aes(x = column, y = HPO)) + geom_point()
-  g = g + geom_smooth(method = "loess")
+  g <- ggplot(ptmin30, aes(x = column, y = HPO)) + geom_point(col = "orange")
+  g = g + geom_smooth(method = "loess", col = "blue")
   g = g + ggtitle(paste(xvar ," versus Hits given up Per Out"))
   g = g + ggtitle(xvar)
   g = g + xlab(xvar) + ylab("Hits Per Out")
@@ -267,6 +266,12 @@ For the sake of the preliminary analysis, I've filtered the pitching data to onl
 
 As you can see, these three charts have vaguely linear patterns within them. Earned Run Average (ERA) refers to the amount of runs that a pitcher has, on average, given up per nine innings pitched. Expected batting average and Batting Average for Balls in Play are relatively new metrics to baseball, introduced through the Statcast system installed in all MLB ballparks in 2015 (@sc). Expected batting average refers to the likelihood that a batted ball becomes a hit, including home runs. Batting Average for Balls in Play (BABIP), however, refers to the liklihood that a batted ball in play (excluding home runs) becomes a hit. 
 
+<center>
+
+![One of many Hawk-Eye cameras used to collect Statcast Data](pics/statcast.png "One of many Hawk-Eye cameras used to collect Statcast Data (@medium)"){ width=50% }
+
+</center>
+
 Of these three, I think that ERA is the most logical to analyze, given my goal to predict hits per inning given up. The other two are similar to the expected batting average against a hitter which, like Hits Per Out, is a statistic base on the amount of hits a pitcher gives up. 
 
 Although ERA is affected by hits (hits earn runs), the two aren't directly tied together, since it's possible to get a hit (or several hits), without giving up any runs. There could theoretically exist pitchers who give up many hits, but give up few bases and thus not many runs. Additionally, there could be pitchers who give up very few hits, but give up large amounts of bases, and especially home runs, and thus have a very high ERA but a low HPO.
@@ -318,8 +323,8 @@ This model also has an $r^2$ value of $`r round(rsq, 4)`$. $r^2$, or the Coeffic
 
 ```{r}
 g <- ggplot(data = pt, aes(x = ERA, y = HPO))
-g = g + geom_point()
-g = g + stat_smooth(method = "lm", col = "red")
+g = g + geom_point(col = "orange")
+g = g + stat_smooth(method = "lm", col = "blue")
 g
 ```
 
@@ -333,7 +338,7 @@ cooksdf <- as.data.frame(cd)
 cooksdf$obs <- c(1:length(cd))
 
 cp <- ggplot(cooksdf, aes(x = obs, y = cd))
-cp = cp + geom_col()
+cp = cp + geom_col(col = "orange")
 cp = cp + xlim(0, length(pt$playerID) + 5) #+ ylim(0, 1)
 cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
 cp
@@ -347,10 +352,10 @@ cooksdf <- as.data.frame(cd)
 cooksdf$obs <- c(1:length(cd))
 
 cp <- ggplot(cooksdf, aes(x = obs, y = cd))
-cp = cp + geom_col()
+cp = cp + geom_col(col = "orange")
 cp = cp + xlim(0, length(pt$playerID) + 5) + ylim(0, 0.1)
 cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
-cp = cp + geom_hline(yintercept = (1/873), col = "red")
+cp = cp + geom_hline(yintercept = (1/873), col = "blue")
 cp
 ```
 
@@ -375,8 +380,8 @@ This model also has an $r^2$ value of $`r round(rsq, 4)`$. It has an adjusted $r
 
 ```{r}
 g <- ggplot(data = ptf, aes(x = ERA, y = HPO))
-g = g + geom_point()
-g = g + stat_smooth(method = "lm", col = "red")
+g = g + geom_point(col = "blue")
+g = g + stat_smooth(method = "lm", col = "orange")
 g = g + ggtitle("Scatterplot with Outliers Removed")
 g
 ```
@@ -411,8 +416,6 @@ In order to better explain these variables and their relationship. The $R^2$ val
 
 After this analysis is complete, I intend to plot the residuals to show that there is no obvious pattern in them. Then, I will use the Shapiro-Wilk test for normality to show that the errors are normally distributed. 
 
-The following function was taken from [https://rpubs.com/therimalaya/43190](https://rpubs.com/therimalaya/43190)
-
 # Actual tests for Validity
 
 In this section, I will put the theory introduced in the last section to work on our data set. The scatterplot at the end of the previous section seems to illustrate that a simple linear model is a good fit for the data, but many statistics exist to test whether this model is the best one, and to test whether the assumptions that I made when creating the model and removing its outliers are true.
@@ -423,7 +426,7 @@ In this section, I will put the theory introduced in the last section to work on
 e <- ggplot(ptf, aes(x = ERA, y = HPO))
 e = e + geom_point()
 e = e + geom_smooth(method = 'lm')
-e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=hpof.lm$fitted.values))
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=hpof.lm$fitted.values), col = "orange")
 e
 ```
 
@@ -435,8 +438,8 @@ The residuals, which were used to calculate RSS, and therefore TSS can be visuli
 e <- ggplot(ptf, aes(x = ERA, y = HPO))
 e = e + geom_point()
 e = e + geom_smooth(method = 'lm')
-e = e + geom_segment(aes(x=ERA, xend=ERA, y=hpof.lm$fitted.values, yend=mean(hpof.lm$fitted.values)))
-e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)))
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=hpof.lm$fitted.values, yend=mean(hpof.lm$fitted.values)), col = "orange")
+e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)), col = "blue")
 e
 ```
 
@@ -448,8 +451,8 @@ The above plot is a visualization of the mean sum of squares (MSS) of the model.
 e <- ggplot(ptf, aes(x = ERA, y = HPO))
 e = e + geom_point()
 #e = e + geom_smooth(method = 'lm')
-e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=mean(hpof.lm$fitted.values)))
-e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)))
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=mean(hpof.lm$fitted.values)), col = "orange")
+e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)), col = "blue")
 e
 ```
 
@@ -499,7 +502,7 @@ As you can see, with our adjusted data set, a smooth trendline can be drawn. The
 ```{r}
 h <- ggplot(data = ptf, aes(x = ERA, y = hpof.lm$residuals))
 h = h + geom_point(col = "blue")
-h = h + geom_hline(yintercept = 0)
+h = h + geom_hline(yintercept = 0, col = "orange")
 h = h + ylab("Residuals")
 h
 ```
@@ -510,7 +513,7 @@ As you can see from the plot above, there is no clear pattern in the residuals. 
 
 ```{r}
 j <- ggplot(data = ptf, aes(x = hpof.lm$fitted.values, y = hpof.lm$residuals))
-j = j + geom_point()
+j = j + geom_point(col = "orange")
 j = j + geom_smooth(method = "loess")
 j = j + xlab("Fitted Values") + ylab("Residuals")
 j
@@ -560,6 +563,12 @@ predict(hpof.lm, data.frame(ERA=c(7.05)))
 Our model predicts that Keller will give up hits at a rate of 0.3976367 hits per out, or around 2.5 outs pitched before he gives up a hit. 
 
 Over the course of a game, this difference in HPO shows in the other teams hits. Jean Segura had a batting average of 0.266 during the 2020 season, and Tyrone Taylor had a batting average of 0.237, eerily close to Segura's. However, If I had run this model for the pitchers that both players would certainly face at least once (likely multiple times), it would have favored choosing Segura over Taylor. In reality, Jean Segura got two hits on August 1st, while Tyrone Taylor got no hits. 
+
+<center>
+
+![Jean Segura, getting a hit in August of 2021](pics/Jean-Segura.jpg "Jean Segura, getting a hit in August of 2021 (@jean)"){ width=50% }
+
+</center>
 
 There are, of course, examples where my model makes a prediction that ends up breaking my streak rather than maintaining it, but on a higher level, the information from this model can be used in a meaningful way to help choose batters and (hopefully) maintain my streak.
 

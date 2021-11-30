@@ -1,0 +1,321 @@
+---
+title: "Presentation"
+author: "Luke Terry"
+date: "11/29/2021"
+output: 
+  ioslides_presentation
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## Beating The Streak
+
+<center>
+
+![Beat the Streak](pics/bts.jfif "Beat the Streak Logo"){ width=50% }
+
+</center>
+
+By: Luke Terry
+
+## Probability of Beating The Streak
+
+```{r , echo = FALSE}
+library(ggplot2)
+bt <- Lahman::battingStats() #initialize batting data
+
+#create histogram
+bt <- subset(bt, bt$AB > 30)
+g = ggplot(bt, aes(x=BA))
+g = g + geom_histogram(fill = "blue", binwidth = .1)
+g = g + xlab("Batting Averages")
+g = g + ylab("Frequency")
+g = g + ggtitle("Distribution of Seasonal Major League Batting Averages")
+g
+```
+
+Probability of 0.00203, or about 1 in 500.
+
+## The Data
+
+```{r pitcherTable}
+library(Lahman)
+
+ptall <- Lahman::Pitching
+pt <- subset(ptall, ptall$yearID == 2019) #subset the data so that only 2019 data is analyzed
+
+pt$HPO <- pt$H/pt$IPouts #add hits per out column
+
+pt <- subset(pt, pt$IPouts >= 5)
+pt <- subset(pt, is.finite(pt$HPO))
+
+
+library(DT)
+datatable(subset(pt, select = c("playerID", "teamID", "ERA", "W", "L", "HPO")))
+
+#add statcast data to pt --------------------------------------------------------
+
+stc <- read.csv("data/statcast_pitching_data.csv")
+#for some reason different baseball databases use different playerIDS
+#There was no direct crosswalk between the Lahman database and Statcast, so I had to make it myself.
+#The script which does this is in the idCrosswalkTable.R file.
+cw <- readRDS("data/crosswalk.RDS")
+
+#initialize vector for new column
+velocity <- c()
+spin_rate <- c()
+release_extension <- c()
+xba <- c()
+eff_min_vel <- c()
+babip <- c()
+takes <- c()
+launch_angle <- c()
+
+#add statcast data to Lahman pitcher data frame.
+for (i in pt$playerID){
+  #iterate over every pitcher, get their stats
+  mlbID <- cw[which(cw == i),2]
+  playerStats <- stc[which(stc$player_id == mlbID),]
+  
+  #add stats to column vectors
+  velocity <- c(velocity, playerStats$velocity)
+  spin_rate <- c(spin_rate, playerStats$spin_rate)
+  release_extension <- c(release_extension, playerStats$release_extension)
+  xba <- c(xba, playerStats$xba)
+  eff_min_vel <- c(eff_min_vel, playerStats$eff_min_vel)
+  babip <- c(babip, playerStats$babip)
+  takes <- c(takes, playerStats$takes)
+  launch_angle <- c(launch_angle, playerStats$launch_angle)
+
+}
+
+#add new columnds to pt
+pt <- cbind(pt, velocity)
+pt <- cbind(pt, spin_rate)
+pt <- cbind(pt, release_extension)
+pt <- cbind(pt, xba)
+pt <- cbind(pt, eff_min_vel)
+pt <- cbind(pt, babip)
+pt <- cbind(pt, takes)
+pt <- cbind(pt, launch_angle)
+
+
+ptmin30 <- subset(pt, pt$G >= 30) #remove inexperienced or one-off pitchers for preliminary plots
+
+```
+
+```{r}
+hpo.lm <- with(pt, lm(HPO ~ ERA))
+sm <- summary(hpo.lm)
+betas <- sm$coefficients
+rsq <- sm$r.squared
+rsqa <- sm$adj.r.squared
+```
+
+## Research Question
+
+I am interested in finding a good predictor of a pitcher's HPO, the rate at which a pitcher gives up hits.
+
+Not Walks, Not Bases, just Hits.
+
+## Assumptions
+
+ - Trend is Linear (Preliminary Plots Coming Soon)
+ - $\epsilon_i \stackrel{\text{iid}}{\sim} N(0,\sigma^2)$
+
+## Preliminary Plots
+
+```{r eval = TRUE, echo = FALSE}
+library(shiny)
+library(ggplot2)
+library(patchwork)
+
+#only render these plots if in an interactive document type
+#if (interactive()){
+  
+ui <- fluidPage(
+  plotOutput("LoessPlot"),
+
+  #list input variables
+  selectInput(inputId = "x", label = "X Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO","Takes" = "takes", "Launch Angle" = "launch_angle", "Hits" = "H")),
+  
+  selectInput(inputId = "y", label = "Y Variable:", choices = c("Wins" = "W","Earned Runs" = "ER", "Earned Run Average" = "ERA", "Opponents Batting Average" = "BAOpp", "Total Walks Given Up" = "BB", "Strikeouts" = "SO", "Earned Runs" = "ER", "Velocity" = "velocity", "Spin Rate" = "spin_rate", "Release Extension" = "release_extension","Expected Batting Average" = "xba", "Effective Minimum Velocity" = "eff_min_vel", "Batting Average on Balls in Play" = "babip", "Hits Per Out" = "HPO", "Takes" = "takes", "Launch Angle" = "launch_angle", "Hits" = "H")),
+
+#input for minimum number of pitches
+ sliderInput("mp", "Minimum number of Games for each pitcher",
+    min = 0, max = 50, value = 30, step = 1)
+  
+)
+
+server <- function(input, output) {
+  output$LoessPlot <- renderPlot({
+    
+  #subset pt based on minimum number of pitches
+  pt <- subset(pt, pt$G >= input$mp)
+    
+  g <- ggplot(data = pt, aes_string(x = input$x, y = input$y)) + geom_point()
+  g = g + ggtitle(input$x)
+  g = g + geom_smooth(method = "loess")
+
+  g
+  })
+
+}
+
+shinyApp(ui, server)
+
+#}
+```
+
+## Outliers
+
+```{r}
+g <- ggplot(data = pt, aes(x = ERA, y = HPO))
+g = g + geom_point(col = "orange")
+g = g + stat_smooth(method = "lm", col = "blue")
+g
+```
+
+## Outliers, Cont.
+
+```{r}
+cd <- cooks.distance(hpo.lm)
+cooksdf <- as.data.frame(cd)
+cooksdf$obs <- c(1:length(cd))
+
+cp <- ggplot(cooksdf, aes(x = obs, y = cd))
+cp = cp + geom_col(col = "orange")
+cp = cp + xlim(0, length(pt$playerID) + 5) #+ ylim(0, 1)
+cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
+cp
+```
+
+## Outliers, Cont.
+
+```{r}
+cd <- cooks.distance(hpo.lm)
+cooksdf <- as.data.frame(cd)
+cooksdf$obs <- c(1:length(cd))
+
+cp <- ggplot(cooksdf, aes(x = obs, y = cd))
+cp = cp + geom_col(col = "orange")
+cp = cp + xlim(0, length(pt$playerID) + 5) + ylim(0, 0.1)
+cp = cp + ggtitle("Cooks Distance Plot") + xlab("Observation Number") + ylab("Cook's Distance")
+cp = cp + geom_hline(yintercept = (1/873), col = "blue")
+cp
+```
+
+## Data Plot without Outliers
+
+```{r}
+#remove data with an excessively high Cook's Distance
+baddata <- subset(cooksdf, cd >= (1/873), select = obs)$obs
+ptf <- pt[-c(baddata),]
+
+ptf <- subset(ptf, is.finite(HPO))
+
+hpof.lm <- with(ptf, lm(HPO ~ ERA))
+smf <- summary(hpof.lm)
+betas <- smf$coefficients
+rsq <- smf$r.squared
+rsqa <- smf$adj.r.squared
+```
+
+
+```{r}
+g <- ggplot(data = ptf, aes(x = ERA, y = HPO))
+g = g + geom_point(col = "blue")
+g = g + stat_smooth(method = "lm", col = "orange")
+g = g + ggtitle("Scatterplot with Outliers Removed")
+g
+```
+
+## Verification of Assumptions
+
+```{r}
+s20x::normcheck(hpof.lm, shapiro.wilk = TRUE)
+```
+
+## Assesment of a Linear Model
+
+```{r}
+f <- ggplot(data = ptf, aes(x = ERA, y = HPO))
+f = f + geom_point()
+f = f + geom_smooth(method = "loess", col = "blue", fill = "orange")
+f = f + ggtitle("Smooth Trend Line for Pitcher's HPO vs ERA with Outliers Removed")
+f
+```
+
+## Assesment of a Linear Model, Cont.
+
+```{r}
+h <- ggplot(data = ptf, aes(x = ERA, y = hpof.lm$residuals))
+h = h + geom_point(col = "blue")
+h = h + geom_hline(yintercept = 0, col = "orange")
+h = h + ylab("Residuals")
+h
+```
+
+## Assesment of a Linear Model, Cont.
+
+```{r}
+j <- ggplot(data = ptf, aes(x = hpof.lm$fitted.values, y = hpof.lm$residuals))
+j = j + geom_point(col = "orange")
+j = j + geom_smooth(method = "loess")
+j = j + xlab("Fitted Values") + ylab("Residuals")
+j
+```
+
+## Our Model
+
+$$
+Y_i = \beta_0 + \beta_1X_i + \epsilon_i
+$$
+
+$$
+ \hat\epsilon =  (y_i - \hat{y_i}) = (y_i - \hat{\beta_0} + \hat{\beta_1}x_i)
+$$
+## Is the model any good?
+
+The values predicted by this linear model are $\hat{\beta_0} = `r round(betas[1],4)`$ and $\hat{\beta_1} = `r round(betas[2],4)`$.
+This model also has an $r^2$ value of $`r round(rsq, 4)`$. It has an adjusted $r^2$ value of $`r round(rsqa, 4)$, however. Adjusted $r^2$ is a similar metric to $r^2$, in that it is a measure of how well the model fits the data. Adjusted $r^2$, however, accounts for the amount of data points in your data set.
+
+## Where $R^2$ comes from
+
+```{r}
+e <- ggplot(ptf, aes(x = ERA, y = HPO))
+e = e + geom_point()
+e = e + geom_smooth(method = 'lm')
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=mean(hpof.lm$fitted.values)), col = "orange")
+e = e + geom_segment(aes(x=ERA, xend=ERA, y=HPO, yend=hpof.lm$fitted.values), col = "dark blue")
+e = e + geom_hline(aes(yintercept = mean(hpof.lm$fitted.values)), col = "blue")
+e
+```
+
+## Model Evaluation
+
+```{r}
+summary(hpof.lm)
+```
+
+## Confidence Interval
+
+```{r}
+s20x::ciReg(hpof.lm, conf.level=0.95, print.out=TRUE)
+```
+
+## Conclusion
+
+![Jean Segura, getting a hit in August of 2021](pics/Jean-Segura.jpg "Jean Segura, getting a hit in August of 2021 (@jean)"){ width=50% }
+
+## Conclusion, Continued
+
+ - Good Model, Useful, but
+ - There are many factors which affect a hit, such as
+ - Ballpark, Player Age, Other Pitching Factors
+ 
+ This analysis is a good start, but more analysis may be required to provide a satisfactory answer to the research question.
